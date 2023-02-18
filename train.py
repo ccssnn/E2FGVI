@@ -7,6 +7,7 @@ import torch
 import torch.multiprocessing as mp
 
 from core.trainer import Trainer
+from core.dataset import *
 from core.dist import (
     get_world_size,
     get_local_rank,
@@ -63,6 +64,24 @@ def main_worker(rank, config):
     trainer = Trainer(config)
     trainer.train()
 
+def test_dataloader(config: dict):
+    train_dataset = TrainDataset(config['train_data_loader'])
+
+    train_sampler = None
+    train_args = config['trainer']
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=train_args['batch_size'] // config['world_size'],
+        shuffle=(train_sampler is None),
+        num_workers=train_args['num_workers'],
+        sampler=train_sampler)
+
+    for frames, masks, name in train_loader:
+        print(f"name = {name}, frames = {frames.shape}, masks = {masks.shape}")
+
+
+
 
 if __name__ == "__main__":
 
@@ -79,11 +98,20 @@ if __name__ == "__main__":
     config['distributed'] = True if config['world_size'] > 1 else False
     print(config['world_size'])
     # setup distributed parallel training environments
-    if get_master_ip() == "127.0.0.1":
+    #  if get_master_ip() == "127.0.0.1":
+    if config['world_size'] > 1:
+        print("CSN: DDP")
         # manually launch distributed processes
         mp.spawn(main_worker, nprocs=config['world_size'], args=(config, ))
     else:
         # multiple processes have been launched by openmpi
-        config['local_rank'] = get_local_rank()
-        config['global_rank'] = get_global_rank()
+        #  config['local_rank'] = get_local_rank()
+        #  config['global_rank'] = get_global_rank()
+        print("CSN: single!!!!!!")
+        config['local_rank'] = 0
+        config['global_rank'] = 0
+        config['world_size'] = 1
+        config['distributed'] = False
         main_worker(-1, config)
+        #  test_dataloader(config)
+
